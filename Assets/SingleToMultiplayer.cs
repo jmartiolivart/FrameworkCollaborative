@@ -35,8 +35,9 @@ public class SingleToMultiplayer : MonoBehaviour
 
         //Configuerem el NetworkManager
         networkManagerComponent = settingUpNetworkManager(networkManagerComponent);
+
         
-        
+        //AFEGIR TOT LO CODI DE NETWORK CONNECT? (i fico per automatitzar en plan WAY no té a veure amb NETCODE al codi ho fico)
 
 
 
@@ -54,6 +55,8 @@ public class SingleToMultiplayer : MonoBehaviour
         unityTransportComponent.ConnectionData.Address = Adress;
         unityTransportComponent.ConnectionData.Port = Port;
 
+        //AFEGIR LA m_ProtocolType? per si es relay o el altre?
+
         return unityTransportComponent;
     }
 
@@ -69,7 +72,15 @@ public class SingleToMultiplayer : MonoBehaviour
         else
         {
             networkManagerComponent.NetworkConfig.PlayerPrefab = Jugador;
+
+
         }
+
+
+
+
+
+
         return networkManagerComponent;
     }
 }
