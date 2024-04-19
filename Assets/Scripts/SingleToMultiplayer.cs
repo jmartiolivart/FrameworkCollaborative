@@ -11,6 +11,14 @@ public class SingleToMultiplayer : MonoBehaviour
     public string Adress = "127.0.0.1"; // Valor per defecte: "127.0.0.1"
     public ushort Port = 7777; // Valor per defecte: 7777
     public GameObject Jugador;
+    
+    
+    //Actualment no operatius ja que no s'hi pot accedir via codi
+    [Header("Per proves locals, es millor deixar desactivada l'opció, per evitar\n exposar els ports del teu dispositu\n")]
+    public bool PermetreConnexionsRemotes = false ;
+    public ProtocolType Protocol;
+    
+
 
     private GameObject networkManager;
     private NetworkManager networkManagerComponent;
@@ -54,8 +62,11 @@ public class SingleToMultiplayer : MonoBehaviour
     {
         unityTransportComponent.ConnectionData.Address = Adress;
         unityTransportComponent.ConnectionData.Port = Port;
+        //unityTransportComponent.ConnectionData.AllowRemoteConnection = PermetreConnexionsRemotes;
 
-        //AFEGIR LA m_ProtocolType? per si es relay o el altre?
+
+        //AFEGIR LA m_ProtocolType? per si es el normal o relay?
+        //unityTransportComponent.Protocol 
 
         return unityTransportComponent;
     }
@@ -83,4 +94,13 @@ public class SingleToMultiplayer : MonoBehaviour
 
         return networkManagerComponent;
     }
+
+    //A causa del codi privat no accessible a fer el canvi
+    public enum ProtocolType
+    {
+        UnityTransport = 0,
+        RelayUnityTransport = 1
+    }
+
+
 }
