@@ -1,8 +1,7 @@
-using System.Collections;
-using System.Collections.Generic;
 using UnityEngine;
 using Unity.Netcode;
 using Unity.Netcode.Transports.UTP;
+
 
 public class SingleToMultiplayer : MonoBehaviour
 {
@@ -38,24 +37,33 @@ public class SingleToMultiplayer : MonoBehaviour
 
         // Creem un nou objecte NetworkConfig i l'assignem a NetworkManager i creem NetworkManager se li passa unityTransport creat
         networkManagerComponent.NetworkConfig = new NetworkConfig();
-       
         networkManagerComponent.NetworkConfig.NetworkTransport = (NetworkTransport) unityTransportComponent;
 
         //Configuerem el NetworkManager
         networkManagerComponent = settingUpNetworkManager(networkManagerComponent);
 
-        
-        //AFEGIR TOT LO CODI DE NETWORK CONNECT? (i fico per automatitzar en plan WAY no té a veure amb NETCODE al codi ho fico)
+
+        //Agafem el valor indicat per l'usuari per si es vol el UnityTransport tipus DIRECTE o tipus RELAY
+        if (Protocol == ProtocolType.UnityTransport)
+        {
+            directConfiguration();
+            Debug.LogError(Protocol + "ITS DIRECT");
+        }
+
+        //RELAY (Fent servir el RELAY)
+        if (Protocol == ProtocolType.RelayUnityTransport)
+        {
+            relayConfiguration();
+            Debug.LogError(Protocol + "ITS RELAYYYY");
+        }
+        //unityTransportComponent.SetRelayServerData(new RelayServerData(allocation, "dtls"));
 
 
 
 
-    }
+        //AFEGIR TOT LO CODI DE NETWORK CONNECT? 
 
-    // Update is called once per frame
-    void Update()
-    {
-        
+
     }
 
     private UnityTransport settingUpUnityTransport(UnityTransport unityTransportComponent)
@@ -65,8 +73,8 @@ public class SingleToMultiplayer : MonoBehaviour
         //unityTransportComponent.ConnectionData.AllowRemoteConnection = PermetreConnexionsRemotes;
 
 
-        //AFEGIR LA m_ProtocolType? per si es el normal o relay?
-        //unityTransportComponent.Protocol 
+        
+
 
         return unityTransportComponent;
     }
@@ -87,15 +95,24 @@ public class SingleToMultiplayer : MonoBehaviour
 
         }
 
-
-
-
-
-
         return networkManagerComponent;
     }
 
-    //A causa del codi privat no accessible a fer el canvi
+
+    public void directConfiguration()
+    {
+
+    }
+
+    public async void relayConfiguration()
+    {
+
+        //Allocation allocation = await RelayService.Instance.CreateAllocationAsync(2);
+        //unityTransportComponent.SetClientRelayData(allocation.RelayServer.IpV4, (ushort)allocation.RelayServer.Port,
+        //       allocation.AllocationIdBytes, allocation.Key, allocation.ConnectionData, allocation.HostConnectionData);
+    }
+
+
     public enum ProtocolType
     {
         UnityTransport = 0,
