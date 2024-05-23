@@ -1,7 +1,13 @@
 using UnityEngine;
 using Unity.Netcode;
 using Unity.Netcode.Transports.UTP;
-
+using Unity.Services.Lobbies.Models;
+using Unity.Services.Authentication;
+using Unity.Services.Core;
+using Unity.Services.Lobbies;
+using Unity.Services.Relay.Models;
+using Unity.Services.Relay;
+using System.Collections.Generic;
 
 public class SingleToMultiplayer : MonoBehaviour
 {
@@ -9,6 +15,7 @@ public class SingleToMultiplayer : MonoBehaviour
     // Assignació de valors per defecte
     public string Adress = "127.0.0.1"; // Valor per defecte: "127.0.0.1"
     public ushort Port = 7777; // Valor per defecte: 7777
+    [Header("Prefab")]
     public GameObject Jugador;
     
     
@@ -53,15 +60,16 @@ public class SingleToMultiplayer : MonoBehaviour
         //RELAY (Fent servir el RELAY)
         if (Protocol == ProtocolType.RelayUnityTransport)
         {
-            relayConfiguration();
             Debug.LogError(Protocol + "ITS RELAYYYY");
+            // Component NetworkConnect
+            NetworkConnect networkConnect = GetComponent<NetworkConnect>();
+            if (networkConnect == null)
+            {
+                networkConnect = networkManager.AddComponent<NetworkConnect>();
+            }
         }
         //unityTransportComponent.SetRelayServerData(new RelayServerData(allocation, "dtls"));
 
-
-
-
-        //AFEGIR TOT LO CODI DE NETWORK CONNECT? 
 
 
     }
@@ -104,14 +112,6 @@ public class SingleToMultiplayer : MonoBehaviour
 
     }
 
-    public async void relayConfiguration()
-    {
-
-        //Allocation allocation = await RelayService.Instance.CreateAllocationAsync(2);
-        //unityTransportComponent.SetClientRelayData(allocation.RelayServer.IpV4, (ushort)allocation.RelayServer.Port,
-        //       allocation.AllocationIdBytes, allocation.Key, allocation.ConnectionData, allocation.HostConnectionData);
-    }
-
 
     public enum ProtocolType
     {
@@ -119,5 +119,88 @@ public class SingleToMultiplayer : MonoBehaviour
         RelayUnityTransport = 1
     }
 
+    /**********************************************************************************************/
+    /**********************************************************************************************/
+    /************************************CODI DE RELAY*********************************************/
+    /**********************************************************************************************/
+    /**********************************************************************************************/
+    /**********************************************************************************************/
+    /**********************************************************************************************/
+
+    public class NetworkConnect : MonoBehaviour
+    {
+        // Classe per decidir si crear la sala o unir-se a una.
+        public int maxConnection = 10;
+        public UnityTransport transport;
+
+        private Lobby currentLobby;
+        private float timerPing;
+
+        private async void Awake()
+        {
+            await UnityServices.InitializeAsync();
+            await AuthenticationService.Instance.SignInAnonymouslyAsync();
+
+            JoinOrCreate();
+
+        }
+
+        public async void JoinOrCreate()
+        {
+            try
+            {
+                currentLobby = await Lobbies.Instance.QuickJoinLobbyAsync();
+                string relayJoinCode = currentLobby.Data["JOIN_KEY"].Value;
+
+                JoinAllocation allocation = await RelayService.Instance.JoinAllocationAsync(relayJoinCode);
+                transport.SetClientRelayData(allocation.RelayServer.IpV4, (ushort)allocation.RelayServer.Port,
+                    allocation.AllocationIdBytes, allocation.Key, allocation.ConnectionData, allocation.HostConnectionData);
+
+
+                NetworkManager.Singleton.StartClient();
+            }
+            catch
+            {
+                Create();
+            }
+        }
+
+        public async void Create()
+        {
+
+            Allocation allocation = await RelayService.Instance.CreateAllocationAsync(maxConnection);
+            string joinCode = await RelayService.Instance.GetJoinCodeAsync(allocation.AllocationId);
+
+            Debug.LogError(joinCode);
+
+            transport.SetHostRelayData(allocation.RelayServer.IpV4, (ushort)allocation.RelayServer.Port,
+                allocation.AllocationIdBytes, allocation.Key, allocation.ConnectionData);
+
+            CreateLobbyOptions lobbyOptions = new CreateLobbyOptions();
+            lobbyOptions.IsPrivate = false;
+            lobbyOptions.Data = new Dictionary<string, DataObject>();
+            DataObject dataObject = new DataObject(DataObject.VisibilityOptions.Public, joinCode);
+            lobbyOptions.Data.Add("JOIN_KEY", dataObject);
+
+            currentLobby = await Lobbies.Instance.CreateLobbyAsync("Lobby Name", maxConnection, lobbyOptions);
+
+            NetworkManager.Singleton.StartHost();
+        }
+
+
+
+        private void Update()
+        {
+            if (timerPing > 15)
+            {
+                timerPing = 0;
+                if (currentLobby != null && currentLobby.HostId == AuthenticationService.Instance.PlayerId)
+                {
+                    LobbyService.Instance.SendHeartbeatPingAsync(currentLobby.Id);
+                }
+                timerPing += Time.deltaTime;
+            }
+        }
+    }
 
 }
