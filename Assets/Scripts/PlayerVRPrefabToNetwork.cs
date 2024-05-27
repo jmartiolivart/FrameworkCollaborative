@@ -5,6 +5,13 @@ using Unity.Netcode.Components;
 
 public class PlayerVRPrefabToNetwork : MonoBehaviour
 {
+    // Aquestes variables es podran configurar des de la UI de Unity
+    public Transform root;
+    public Transform head;
+    public Transform rightHand;
+    public Transform leftHand;
+    public GameObject[] gameObjectsToDisable;
+
     void Awake()
     {
         // Component NetworkObject
@@ -30,6 +37,9 @@ public class PlayerVRPrefabToNetwork : MonoBehaviour
         {
             networkPlayer = gameObject.AddComponent<NetworkPlayer>();
         }
+
+        // Pasem les referències a NetworkPlayer
+        networkPlayer.SetReferences(root, head, rightHand, leftHand, gameObjectsToDisable);
     }
 }
 
@@ -58,19 +68,19 @@ public class NetworkPlayer : NetworkBehaviour
 {
     // Script del Player que s'enviarà les dades a traves la xarxa per veure els moviments
     [SerializeField]
-    public Transform root;
+    private Transform root;
 
     [SerializeField]
-    public Transform head;
+    private Transform head;
 
     [SerializeField]
-    public Transform rightHand;
+    private Transform rightHand;
 
     [SerializeField]
-    public Transform leftHand;
+    private Transform leftHand;
 
     [SerializeField]
-    public GameObject[] gameObjectsToDisable;
+    private GameObject[] gameObjectsToDisable;
 
     public override void OnNetworkSpawn()
     {
@@ -108,6 +118,15 @@ public class NetworkPlayer : NetworkBehaviour
             leftHand.position = VRRigReference.Singleton.leftHand.position;
             leftHand.rotation = VRRigReference.Singleton.leftHand.rotation;
         }
+    }
+
+    public void SetReferences(Transform root, Transform head, Transform rightHand, Transform leftHand, GameObject[] gameObjectsToDisable)
+    {
+        this.root = root;
+        this.head = head;
+        this.rightHand = rightHand;
+        this.leftHand = leftHand;
+        this.gameObjectsToDisable = gameObjectsToDisable;
     }
 }
 
