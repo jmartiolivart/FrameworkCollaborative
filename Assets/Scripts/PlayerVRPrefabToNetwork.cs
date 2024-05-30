@@ -1,11 +1,33 @@
-using System.Collections;
 using UnityEngine;
 using Unity.Netcode;
 using Unity.Netcode.Components;
 
+public class VRRigReference : MonoBehaviour
+{
+    public static VRRigReference Singleton;
+
+    public Transform root;
+    public Transform head;
+    public Transform rightHand;
+    public Transform leftHand;
+
+    private void Awake()
+    {
+        if (Singleton == null)
+        {
+            Singleton = this;
+            Debug.Log("VRRigReference Singleton inicialitzat");
+        }
+        else
+        {
+            Debug.LogWarning("Més d'una instància de VRRigReference trobada! Destruïnt aquesta instància.");
+            Destroy(gameObject);
+        }
+    }
+}
+
 public class PlayerVRPrefabToNetwork : MonoBehaviour
 {
-    // Aquestes variables es podran configurar des de la UI de Unity
     public Transform root;
     public Transform head;
     public Transform rightHand;
@@ -14,32 +36,42 @@ public class PlayerVRPrefabToNetwork : MonoBehaviour
 
     void Awake()
     {
-        // Component NetworkObject
         if (GetComponent<NetworkObject>() == null)
         {
             gameObject.AddComponent<NetworkObject>();
         }
 
-        // Component NetworkTransformClient
-        NetworkTransformClient networkTransformClient = GetComponent<NetworkTransformClient>();
-        if (networkTransformClient == null)
+        if (GetComponent<NetworkTransform>() == null)
         {
-            networkTransformClient = gameObject.AddComponent<NetworkTransformClient>();
+            NetworkTransformClient networkTransformClient = GetComponent<NetworkTransformClient>();
+            if (networkTransformClient == null)
+            {
+                networkTransformClient = gameObject.AddComponent<NetworkTransformClient>();
+            }
+            networkTransformClient.SyncScaleX = false;
+            networkTransformClient.SyncScaleY = false;
+            networkTransformClient.SyncScaleZ = false;
         }
-        // Treiem que s'hagi d'actualitzar la escala del GameObject ja que en principi no ha de canviar
-        networkTransformClient.SyncScaleX = false;
-        networkTransformClient.SyncScaleY = false;
-        networkTransformClient.SyncScaleZ = false;
 
-        // Component NetworkPlayer
         NetworkPlayer networkPlayer = GetComponent<NetworkPlayer>();
         if (networkPlayer == null)
         {
             networkPlayer = gameObject.AddComponent<NetworkPlayer>();
         }
 
-        // Pasem les referències a NetworkPlayer
-        networkPlayer.SetReferences(root, head, rightHand, leftHand, gameObjectsToDisable);
+        if (root != null && head != null && rightHand != null && leftHand != null && gameObjectsToDisable != null)
+        {
+            networkPlayer.SetReferences(root, head, rightHand, leftHand, gameObjectsToDisable);
+        }
+        else
+        {
+            Debug.LogError("Una o més referències no estan assignades en el prefab Jugador.");
+            if (root == null) Debug.LogError("root és null");
+            if (head == null) Debug.LogError("head és null");
+            if (rightHand == null) Debug.LogError("rightHand és null");
+            if (leftHand == null) Debug.LogError("leftHand és null");
+            if (gameObjectsToDisable == null) Debug.LogError("gameObjectsToDisable és null");
+        }
     }
 }
 
@@ -57,7 +89,6 @@ public class NetworkTransformClient : NetworkTransform
 
     private void Awake()
     {
-        // Assegura que les propietats tenen els valors desitjats
         SyncScaleX = false;
         SyncScaleY = false;
         SyncScaleZ = false;
@@ -66,7 +97,6 @@ public class NetworkTransformClient : NetworkTransform
 
 public class NetworkPlayer : NetworkBehaviour
 {
-    // Script del Player que s'enviarà les dades a traves la xarxa per veure els moviments
     [SerializeField]
     private Transform root;
 
@@ -82,11 +112,25 @@ public class NetworkPlayer : NetworkBehaviour
     [SerializeField]
     private GameObject[] gameObjectsToDisable;
 
+    private void Start()
+    {
+        StartCoroutine(WaitForVRRigReference());
+    }
+
+    private IEnumerator WaitForVRRigReference()
+    {
+        while (VRRigReference.Singleton == null)
+        {
+            Debug.LogError("Esperant a que VRRigReference.Singleton sigui inicialitzat...");
+            yield return null; // Espera un frame
+        }
+        Debug.Log("VRRigReference.Singleton inicialitzat correctament");
+    }
+
     public override void OnNetworkSpawn()
     {
         base.OnNetworkSpawn();
 
-        // Si és el propietari, per a que no dupliqui les mans borrem i el cap
         if (IsOwner)
         {
             foreach (var item in gameObjectsToDisable)
@@ -96,16 +140,26 @@ public class NetworkPlayer : NetworkBehaviour
         }
     }
 
-    void Start()
-    {
-        // Pots afegir codi d'inicialització aquí si cal
-    }
-
-    // Update is called once per frame
     void Update()
     {
         if (IsOwner)
         {
+            if (root == null || head == null || rightHand == null || leftHand == null)
+            {
+                Debug.LogError("Una o més referències són null a Update");
+                if (root == null) Debug.LogError("root és null");
+                if (head == null) Debug.LogError("head és null");
+                if (rightHand == null) Debug.LogError("rightHand és null");
+                if (leftHand == null) Debug.LogError("leftHand és null");
+                return; // Sortim de la funció Update per evitar l'error
+            }
+
+            if (VRRigReference.Singleton == null)
+            {
+                Debug.LogError("VRRigReference.Singleton és null a Update");
+                return; // Sortim de la funció Update per evitar l'error
+            }
+
             root.position = VRRigReference.Singleton.root.position;
             root.rotation = VRRigReference.Singleton.root.rotation;
 
@@ -127,20 +181,5 @@ public class NetworkPlayer : NetworkBehaviour
         this.rightHand = rightHand;
         this.leftHand = leftHand;
         this.gameObjectsToDisable = gameObjectsToDisable;
-    }
-}
-
-public class VRRigReference : MonoBehaviour
-{
-    public static VRRigReference Singleton;
-
-    public Transform root;
-    public Transform head;
-    public Transform rightHand;
-    public Transform leftHand;
-
-    private void Awake()
-    {
-        Singleton = this;
     }
 }
