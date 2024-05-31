@@ -1,6 +1,7 @@
 using UnityEngine;
 using Unity.Netcode;
 using Unity.Netcode.Components;
+using System.Collections;
 
 public class VRRigReference : MonoBehaviour
 {
@@ -20,7 +21,6 @@ public class VRRigReference : MonoBehaviour
         }
         else
         {
-            Debug.LogWarning("Més d'una instància de VRRigReference trobada! Destruïnt aquesta instància.");
             Destroy(gameObject);
         }
     }
@@ -33,6 +33,8 @@ public class PlayerVRPrefabToNetwork : MonoBehaviour
     public Transform rightHand;
     public Transform leftHand;
     public GameObject[] gameObjectsToDisable;
+
+    private NetworkPlayer networkPlayer;
 
     void Awake()
     {
@@ -53,29 +55,40 @@ public class PlayerVRPrefabToNetwork : MonoBehaviour
             networkTransformClient.SyncScaleZ = false;
         }
 
-        NetworkPlayer networkPlayer = GetComponent<NetworkPlayer>();
+        networkPlayer = GetComponent<NetworkPlayer>();
         if (networkPlayer == null)
         {
             networkPlayer = gameObject.AddComponent<NetworkPlayer>();
         }
 
-        if (root != null && head != null && rightHand != null && leftHand != null && gameObjectsToDisable != null)
+        StartCoroutine(WaitForVRRigReference());
+    }
+
+    private IEnumerator WaitForVRRigReference()
+    {
+        while (VRRigReferenceCurrent.Singleton == null)
         {
-            networkPlayer.SetReferences(root, head, rightHand, leftHand, gameObjectsToDisable);
+            Debug.Log("Esperant a que VRRigReferenceCurrent.Singleton sigui inicialitzat...");
+            yield return null; // Espera un frame
+        }
+        Debug.Log("VRRigReferenceCurrent.Singleton inicialitzat correctament");
+
+        if (root == null) root = VRRigReferenceCurrent.Singleton.root;
+        if (head == null) head = VRRigReferenceCurrent.Singleton.head;
+        if (rightHand == null) rightHand = VRRigReferenceCurrent.Singleton.rightHand;
+        if (leftHand == null) leftHand = VRRigReferenceCurrent.Singleton.leftHand;
+
+        if (root == null || head == null || rightHand == null || leftHand == null)
+        {
+            Debug.LogError("Una o més referències no estan assignades correctament després de la inicialització de VRRigReferenceCurrent.");
         }
         else
         {
-            Debug.LogError("Una o més referències no estan assignades en el prefab Jugador.");
-            if (root == null) Debug.LogError("root és null");
-            if (head == null) Debug.LogError("head és null");
-            if (rightHand == null) Debug.LogError("rightHand és null");
-            if (leftHand == null) Debug.LogError("leftHand és null");
-            if (gameObjectsToDisable == null) Debug.LogError("gameObjectsToDisable és null");
+            networkPlayer.SetReferences(root, head, rightHand, leftHand, gameObjectsToDisable);
         }
     }
 }
 
-// La classe NetworkTransformClient amb el comportament personalitzat
 public class NetworkTransformClient : NetworkTransform
 {
     public bool SyncScaleX = false;
@@ -112,65 +125,40 @@ public class NetworkPlayer : NetworkBehaviour
     [SerializeField]
     private GameObject[] gameObjectsToDisable;
 
+    private bool isVRRigReferenceInitialized = false;
+
     private void Start()
     {
-        StartCoroutine(WaitForVRRigReference());
-    }
-
-    private IEnumerator WaitForVRRigReference()
-    {
-        while (VRRigReference.Singleton == null)
+        if (VRRigReferenceCurrent.Singleton != null)
         {
-            Debug.LogError("Esperant a que VRRigReference.Singleton sigui inicialitzat...");
-            yield return null; // Espera un frame
-        }
-        Debug.Log("VRRigReference.Singleton inicialitzat correctament");
-    }
-
-    public override void OnNetworkSpawn()
-    {
-        base.OnNetworkSpawn();
-
-        if (IsOwner)
-        {
-            foreach (var item in gameObjectsToDisable)
-            {
-                item.SetActive(false);
-            }
+            SetReferences(VRRigReferenceCurrent.Singleton.root, VRRigReferenceCurrent.Singleton.head, VRRigReferenceCurrent.Singleton.rightHand, VRRigReferenceCurrent.Singleton.leftHand, gameObjectsToDisable);
+            isVRRigReferenceInitialized = true;
         }
     }
 
     void Update()
     {
+        if (!isVRRigReferenceInitialized) return;
+
         if (IsOwner)
         {
             if (root == null || head == null || rightHand == null || leftHand == null)
             {
                 Debug.LogError("Una o més referències són null a Update");
-                if (root == null) Debug.LogError("root és null");
-                if (head == null) Debug.LogError("head és null");
-                if (rightHand == null) Debug.LogError("rightHand és null");
-                if (leftHand == null) Debug.LogError("leftHand és null");
                 return; // Sortim de la funció Update per evitar l'error
             }
 
-            if (VRRigReference.Singleton == null)
-            {
-                Debug.LogError("VRRigReference.Singleton és null a Update");
-                return; // Sortim de la funció Update per evitar l'error
-            }
+            root.position = VRRigReferenceCurrent.Singleton.root.position;
+            root.rotation = VRRigReferenceCurrent.Singleton.root.rotation;
 
-            root.position = VRRigReference.Singleton.root.position;
-            root.rotation = VRRigReference.Singleton.root.rotation;
+            head.position = VRRigReferenceCurrent.Singleton.head.position;
+            head.rotation = VRRigReferenceCurrent.Singleton.head.rotation;
 
-            head.position = VRRigReference.Singleton.head.position;
-            head.rotation = VRRigReference.Singleton.head.rotation;
+            rightHand.position = VRRigReferenceCurrent.Singleton.rightHand.position;
+            rightHand.rotation = VRRigReferenceCurrent.Singleton.rightHand.rotation;
 
-            rightHand.position = VRRigReference.Singleton.rightHand.position;
-            rightHand.rotation = VRRigReference.Singleton.rightHand.rotation;
-
-            leftHand.position = VRRigReference.Singleton.leftHand.position;
-            leftHand.rotation = VRRigReference.Singleton.leftHand.rotation;
+            leftHand.position = VRRigReferenceCurrent.Singleton.leftHand.position;
+            leftHand.rotation = VRRigReferenceCurrent.Singleton.leftHand.rotation;
         }
     }
 
