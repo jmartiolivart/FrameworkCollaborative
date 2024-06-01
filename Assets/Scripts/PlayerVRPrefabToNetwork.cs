@@ -3,28 +3,10 @@ using Unity.Netcode;
 using Unity.Netcode.Components;
 using System.Collections;
 
-public class VRRigReference : MonoBehaviour
-{
-    public static VRRigReference Singleton;
-
-    public Transform root;
-    public Transform head;
-    public Transform rightHand;
-    public Transform leftHand;
-
-    private void Awake()
-    {
-        if (Singleton == null)
-        {
-            Singleton = this;
-            Debug.Log("VRRigReference Singleton inicialitzat");
-        }
-        else
-        {
-            Destroy(gameObject);
-        }
-    }
-}
+using UnityEngine;
+using Unity.Netcode;
+using Unity.Netcode.Components;
+using System.Collections;
 
 public class PlayerVRPrefabToNetwork : MonoBehaviour
 {
@@ -38,23 +20,32 @@ public class PlayerVRPrefabToNetwork : MonoBehaviour
 
     void Awake()
     {
+        Debug.Log("PlayerVRPrefabToNetwork Awake");
+
+        // Assegurar-nos que el prefab té NetworkObject
         if (GetComponent<NetworkObject>() == null)
         {
+            Debug.Log("Afegint NetworkObject");
             gameObject.AddComponent<NetworkObject>();
         }
 
-        if (GetComponent<NetworkTransform>() == null)
+        // Substituir NetworkTransform per NetworkTransformClient
+        NetworkTransformClient networkTransformClient = GetComponent<NetworkTransformClient>();
+        if (networkTransformClient == null)
         {
-            NetworkTransformClient networkTransformClient = GetComponent<NetworkTransformClient>();
-            if (networkTransformClient == null)
+            Debug.Log("Substituint NetworkTransform per NetworkTransformClient");
+            NetworkTransform networkTransform = GetComponent<NetworkTransform>();
+            if (networkTransform != null)
             {
-                networkTransformClient = gameObject.AddComponent<NetworkTransformClient>();
+                DestroyImmediate(networkTransform);
             }
+            networkTransformClient = gameObject.AddComponent<NetworkTransformClient>();
             networkTransformClient.SyncScaleX = false;
             networkTransformClient.SyncScaleY = false;
             networkTransformClient.SyncScaleZ = false;
         }
 
+        // Afegir NetworkPlayer
         networkPlayer = GetComponent<NetworkPlayer>();
         if (networkPlayer == null)
         {
@@ -71,6 +62,7 @@ public class PlayerVRPrefabToNetwork : MonoBehaviour
             Debug.Log("Esperant a que VRRigReferenceCurrent.Singleton sigui inicialitzat...");
             yield return null; // Espera un frame
         }
+
         Debug.Log("VRRigReferenceCurrent.Singleton inicialitzat correctament");
 
         if (root == null) root = VRRigReferenceCurrent.Singleton.root;
@@ -85,16 +77,13 @@ public class PlayerVRPrefabToNetwork : MonoBehaviour
         else
         {
             networkPlayer.SetReferences(root, head, rightHand, leftHand, gameObjectsToDisable);
+            Debug.Log("Referències de VRRigReference assignades correctament");
         }
     }
 }
 
 public class NetworkTransformClient : NetworkTransform
 {
-    public bool SyncScaleX = false;
-    public bool SyncScaleY = false;
-    public bool SyncScaleZ = false;
-
     protected override bool OnIsServerAuthoritative()
     {
         return false; // Defineix que aquest NetworkTransform és client-authoritative
@@ -106,7 +95,26 @@ public class NetworkTransformClient : NetworkTransform
         SyncScaleY = false;
         SyncScaleZ = false;
     }
+
+    public override void OnNetworkObjectParentChanged(NetworkObject parentNetworkObject)
+    {
+        if (parentNetworkObject == null)
+        {
+            Debug.LogError("Parent NetworkObject és null a OnNetworkObjectParentChanged");
+            return;
+        }
+
+        Debug.Log("OnNetworkObjectParentChanged: Parent NetworkObject no és null");
+        base.OnNetworkObjectParentChanged(parentNetworkObject);
+    }
+
+    public override void OnNetworkSpawn()
+    {
+        base.OnNetworkSpawn();
+        Debug.Log("NetworkTransformClient OnNetworkSpawn");
+    }
 }
+
 
 public class NetworkPlayer : NetworkBehaviour
 {
@@ -129,16 +137,37 @@ public class NetworkPlayer : NetworkBehaviour
 
     private void Start()
     {
-        if (VRRigReferenceCurrent.Singleton != null)
+        Debug.Log("NetworkPlayer Start");
+        StartCoroutine(WaitForVRRigReference());
+    }
+
+    private IEnumerator WaitForVRRigReference()
+    {
+        while (VRRigReferenceCurrent.Singleton == null)
         {
-            SetReferences(VRRigReferenceCurrent.Singleton.root, VRRigReferenceCurrent.Singleton.head, VRRigReferenceCurrent.Singleton.rightHand, VRRigReferenceCurrent.Singleton.leftHand, gameObjectsToDisable);
-            isVRRigReferenceInitialized = true;
+            Debug.LogError("Esperant a que VRRigReferenceCurrent.Singleton sigui inicialitzat...");
+            yield return null; // Espera un frame
         }
+
+        Debug.Log("VRRigReferenceCurrent.Singleton inicialitzat correctament");
+        isVRRigReferenceInitialized = true;
+
+        if (root == null || head == null || rightHand == null || leftHand == null)
+        {
+            Debug.LogError("Una o més referències són null a WaitForVRRigReference");
+            yield break;
+        }
+
+        Debug.Log("Referències de VRRigReference assignades a NetworkPlayer");
     }
 
     void Update()
     {
-        if (!isVRRigReferenceInitialized) return;
+        if (!isVRRigReferenceInitialized)
+        {
+            Debug.LogWarning("VRRigReference no està inicialitzat");
+            return;
+        }
 
         if (IsOwner)
         {
@@ -164,6 +193,7 @@ public class NetworkPlayer : NetworkBehaviour
 
     public void SetReferences(Transform root, Transform head, Transform rightHand, Transform leftHand, GameObject[] gameObjectsToDisable)
     {
+        Debug.Log("SetReferences called in NetworkPlayer");
         this.root = root;
         this.head = head;
         this.rightHand = rightHand;

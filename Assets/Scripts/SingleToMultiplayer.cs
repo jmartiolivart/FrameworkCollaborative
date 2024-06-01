@@ -78,6 +78,7 @@ public class SingleToMultiplayer : MonoBehaviour
         yield break; // Assegurem que la coroutine sempre retorna un valor
     }
 
+    // Codi del NetworkManager revisat per assegurar que el prefab del jugador està correctament assignat
     private void EnsurePlayerPrefabHasNetworkObject()
     {
         if (Jugador != null)
@@ -89,10 +90,10 @@ public class SingleToMultiplayer : MonoBehaviour
             }
 
             // Assegurar-nos que NetworkTransform també està present
-            NetworkTransform networkTransform = Jugador.GetComponent<NetworkTransform>();
+            NetworkTransformClient networkTransform = Jugador.GetComponent<NetworkTransformClient>();
             if (networkTransform == null)
             {
-                Jugador.AddComponent<NetworkTransform>();
+                Jugador.AddComponent<NetworkTransformClient>();
             }
         }
         else
@@ -100,6 +101,8 @@ public class SingleToMultiplayer : MonoBehaviour
             Debug.LogError("Jugador prefab no està assignat!");
         }
     }
+
+
 
     private UnityTransport settingUpUnityTransport(UnityTransport unityTransportComponent)
     {
