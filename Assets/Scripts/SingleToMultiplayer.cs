@@ -1,24 +1,25 @@
-using UnityEngine;
+Ôªøusing UnityEngine;
 using Unity.Netcode;
 using Unity.Netcode.Transports.UTP;
-using Unity.Services.Lobbies.Models;
-using Unity.Services.Authentication;
 using Unity.Services.Core;
-using Unity.Services.Lobbies;
 using Unity.Services.Relay.Models;
 using Unity.Services.Relay;
+using Unity.Services.Lobbies;
+using Unity.Services.Lobbies.Models;
+using Unity.Services.Authentication;
 using System.Collections.Generic;
-using System.Collections;
+using System;
 using Unity.Netcode.Components;
 
-public class SingleToMultiplayer : MonoBehaviour
+public class SingleToMultiplayer : NetworkBehaviour
 {
     public string Adress = "127.0.0.1";
     public ushort Port = 7777;
     [Header("Prefab")]
     public GameObject Jugador;
+    public GameObject playerNetworkContainerPrefab;
 
-    [Header("Per proves locals, es millor deixar desactivada l'opciÛ, per evitar\n exposar els ports del teu dispositu\n")]
+    [Header("Per proves locals, es millor deixar desactivada l'opci√≥, per evitar exposar els ports del teu dispositu")]
     public bool PermetreConnexionsRemotes = false;
     public ProtocolType Protocol;
 
@@ -26,61 +27,25 @@ public class SingleToMultiplayer : MonoBehaviour
     private NetworkManager networkManagerComponent;
     private UnityTransport unityTransportComponent;
 
-    private void Awake()
+    async void Awake()
     {
+        await UnityServices.InitializeAsync();
         networkManager = new GameObject("NetworkManager");
         networkManagerComponent = networkManager.AddComponent<NetworkManager>();
         unityTransportComponent = networkManager.AddComponent<UnityTransport>();
+        Debug.Log("SingleToMultiplayer Awake called");
     }
 
-    void Start()
+    private void Start()
     {
-        StartCoroutine(InitializeNetworkManager());
-    }
-
-    private IEnumerator InitializeNetworkManager()
-    {
-        // Configurem el UnityTransport
+        Debug.Log("SingleToMultiplayer Start called");
         unityTransportComponent = settingUpUnityTransport(unityTransportComponent);
 
-        // Creem un nou objecte NetworkConfig i l'assignem a NetworkManager
         networkManagerComponent.NetworkConfig = new NetworkConfig();
         networkManagerComponent.NetworkConfig.NetworkTransport = (NetworkTransport)unityTransportComponent;
 
-        // Assegurar-nos que el prefab tÈ el NetworkObject
-        EnsurePlayerPrefabHasNetworkObject();
-
-        // Esperem un frame per assegurar-nos que el prefab est‡ completament inicialitzat
-        yield return null;
-
-        // Configuerem el NetworkManager
         networkManagerComponent = settingUpNetworkManager(networkManagerComponent);
 
-        // Component NetworkConnect
-        NetworkConnect networkConnect = GetComponent<NetworkConnect>();
-        if (networkConnect == null)
-        {
-            networkConnect = networkManager.AddComponent<NetworkConnect>();
-        }
-        networkConnect.transport = unityTransportComponent; // Assigna el transport
-
-        // Agafem el valor indicat per l'usuari per si es vol el UnityTransport tipus DIRECTE o tipus RELAY
-        if (Protocol == ProtocolType.UnityTransport)
-        {
-            directConfiguration();
-        }
-
-        // RELAY (Fent servir el RELAY)
-        if (Protocol == ProtocolType.RelayUnityTransport)
-        {
-        }
-
-        yield break; // Assegurem que la coroutine sempre retorna un valor
-    }
-
-    // Codi del NetworkManager revisat per assegurar que el prefab del jugador est‡ correctament assignat
-    private void EnsurePlayerPrefabHasNetworkObject()
-    {
         if (Jugador != null)
         {
             NetworkObject networkObject = Jugador.GetComponent<NetworkObject>();
@@ -89,20 +54,35 @@ public class SingleToMultiplayer : MonoBehaviour
                 Jugador.AddComponent<NetworkObject>();
             }
 
-            // Assegurar-nos que NetworkTransform tambÈ est‡ present
-            NetworkTransformClient networkTransform = Jugador.GetComponent<NetworkTransformClient>();
+            NetworkTransform networkTransform = Jugador.GetComponent<NetworkTransform>();
             if (networkTransform == null)
             {
-                Jugador.AddComponent<NetworkTransformClient>();
+                Jugador.AddComponent<NetworkTransform>();
             }
         }
         else
         {
-            Debug.LogError("Jugador prefab no est‡ assignat!");
+            Debug.LogError("Jugador prefab no est√† assignat!");
         }
+
+        networkManagerComponent.NetworkConfig.PlayerPrefab = Jugador;
+
+        if (Protocol == ProtocolType.UnityTransport)
+        {
+            NetworkManager.Singleton.StartHost();
+        }
+        else if (Protocol == ProtocolType.RelayUnityTransport)
+        {
+            Debug.LogError(Protocol + " ITS RELAYYYY");
+            NetworkConnect networkConnect = GetComponent<NetworkConnect>();
+            if (networkConnect == null)
+            {
+                networkConnect = networkManager.AddComponent<NetworkConnect>();
+            }
+        }
+
+        NetworkManager.Singleton.OnServerStarted += OnServerStartedHandler;
     }
-
-
 
     private UnityTransport settingUpUnityTransport(UnityTransport unityTransportComponent)
     {
@@ -119,21 +99,68 @@ public class SingleToMultiplayer : MonoBehaviour
         }
         else
         {
-            NetworkObject networkObject = Jugador.GetComponent<NetworkObject>();
-            if (networkObject == null)
-            {
-                Debug.LogError("El prefab Jugador no tÈ un component NetworkObject assignat.");
-            }
-            else
-            {
-                networkManagerComponent.NetworkConfig.PlayerPrefab = Jugador;
-            }
+            networkManagerComponent.NetworkConfig.PlayerPrefab = Jugador;
         }
-
         return networkManagerComponent;
     }
 
-    public void directConfiguration() { }
+    private void OnServerStartedHandler()
+    {
+        Debug.Log("OnServerStartedHandler called");
+        if (NetworkManager.Singleton.IsServer)
+        {
+            if (Jugador == null)
+            {
+                Debug.LogError("Jugador prefab no est√† assignat!");
+                return;
+            }
+
+            GameObject playerNetworkContainer = GameObject.Find("PlayerNetworkContainer");
+            if (playerNetworkContainer == null)
+            {
+                Debug.LogError("PlayerNetworkContainer no est√† present en la escena! Intentant instanciar-lo manualment...");
+                if (playerNetworkContainerPrefab != null)
+                {
+                    playerNetworkContainer = Instantiate(playerNetworkContainerPrefab);
+                    playerNetworkContainer.name = "PlayerNetworkContainer";
+                    NetworkObject containerNetworkObject = playerNetworkContainer.GetComponent<NetworkObject>();
+                    if (containerNetworkObject != null)
+                    {
+                        containerNetworkObject.Spawn();
+                    }
+                    Debug.Log("PlayerNetworkContainer instantiated and spawned manually");
+                }
+                else
+                {
+                    Debug.LogError("playerNetworkContainerPrefab is not assigned in the inspector");
+                    return;
+                }
+            }
+
+            foreach (ulong clientId in NetworkManager.Singleton.ConnectedClientsIds)
+            {
+                if (NetworkManager.Singleton.ConnectedClients[clientId].PlayerObject == null)
+                {
+                    GameObject playerInstance = Instantiate(Jugador);
+                    NetworkObject networkObject = playerInstance.GetComponent<NetworkObject>();
+                    if (networkObject != null)
+                    {
+                        networkObject.SpawnAsPlayerObject(clientId);
+                        Debug.Log("Instantiated Player");
+
+                        Debug.Log("NetworkObject del PlayerNetworkContainer:");
+                        Debug.Log("  IsSpawned: " + networkObject.IsSpawned);
+                        Debug.Log("  IsOwner: " + networkObject.IsOwner);
+                        Debug.Log("  OwnerClientId: " + networkObject.OwnerClientId);
+                    }
+                    else
+                    {
+                        Debug.LogError("NetworkObject no est√† assignat al prefab Jugador!");
+                    }
+                }
+            }
+        }
+    }
 
     public enum ProtocolType
     {
@@ -151,9 +178,9 @@ public class SingleToMultiplayer : MonoBehaviour
 
         private async void Awake()
         {
+            Debug.Log("NetworkConnect Awake called");
             await UnityServices.InitializeAsync();
             await AuthenticationService.Instance.SignInAnonymouslyAsync();
-
             JoinOrCreate();
         }
 
@@ -163,11 +190,9 @@ public class SingleToMultiplayer : MonoBehaviour
             {
                 currentLobby = await Lobbies.Instance.QuickJoinLobbyAsync();
                 string relayJoinCode = currentLobby.Data["JOIN_KEY"].Value;
-
                 JoinAllocation allocation = await RelayService.Instance.JoinAllocationAsync(relayJoinCode);
                 transport.SetClientRelayData(allocation.RelayServer.IpV4, (ushort)allocation.RelayServer.Port,
                     allocation.AllocationIdBytes, allocation.Key, allocation.ConnectionData, allocation.HostConnectionData);
-
                 NetworkManager.Singleton.StartClient();
             }
             catch
@@ -178,24 +203,33 @@ public class SingleToMultiplayer : MonoBehaviour
 
         public async void Create()
         {
-            Allocation allocation = await RelayService.Instance.CreateAllocationAsync(maxConnection);
-            string joinCode = await RelayService.Instance.GetJoinCodeAsync(allocation.AllocationId);
-
-            transport.SetHostRelayData(allocation.RelayServer.IpV4, (ushort)allocation.RelayServer.Port,
-                allocation.AllocationIdBytes, allocation.Key, allocation.ConnectionData);
-
-            CreateLobbyOptions lobbyOptions = new CreateLobbyOptions
+            try
             {
-                IsPrivate = false,
-                Data = new Dictionary<string, DataObject>
+                Allocation allocation = await RelayService.Instance.CreateAllocationAsync(maxConnection);
+                string joinCode = await RelayService.Instance.GetJoinCodeAsync(allocation.AllocationId);
+
+                Debug.LogError(joinCode);
+
+                transport.SetHostRelayData(allocation.RelayServer.IpV4, (ushort)allocation.RelayServer.Port,
+                    allocation.AllocationIdBytes, allocation.Key, allocation.ConnectionData);
+
+                CreateLobbyOptions lobbyOptions = new CreateLobbyOptions
                 {
-                    { "JOIN_KEY", new DataObject(DataObject.VisibilityOptions.Public, joinCode) }
-                }
-            };
+                    IsPrivate = false,
+                    Data = new Dictionary<string, DataObject>
+            {
+                { "JOIN_KEY", new DataObject(DataObject.VisibilityOptions.Public, joinCode) }
+            }
+                };
 
-            currentLobby = await Lobbies.Instance.CreateLobbyAsync("Lobby Name", maxConnection, lobbyOptions);
+                currentLobby = await Lobbies.Instance.CreateLobbyAsync("Lobby Name", maxConnection, lobbyOptions);
 
-            NetworkManager.Singleton.StartHost();
+                NetworkManager.Singleton.StartHost();
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError("Error creating Relay allocation: " + ex.Message);
+            }
         }
 
         private void Update()
@@ -207,8 +241,8 @@ public class SingleToMultiplayer : MonoBehaviour
                 {
                     LobbyService.Instance.SendHeartbeatPingAsync(currentLobby.Id);
                 }
+                timerPing += Time.deltaTime;
             }
-            timerPing += Time.deltaTime;
         }
     }
 }

@@ -1,6 +1,4 @@
-using System.Collections;
-using System.Collections.Generic;
-using UnityEngine;
+ï»¿using UnityEngine;
 
 public class VRRigReferenceCurrent : MonoBehaviour
 {
@@ -13,15 +11,13 @@ public class VRRigReferenceCurrent : MonoBehaviour
 
     private void Awake()
     {
-        if (Singleton == null)
+        if (Singleton != null && Singleton != this)
         {
-            Singleton = this;
-            Debug.Log("VRRigReferenceCurrent Singleton inicialitzat");
+            Destroy(this.gameObject);
+            return;
         }
-        else
-        {
-            Debug.LogWarning("Més d'una instància de VRRigReferenceCurrent trobada! Destruïnt aquesta instància.");
-            Destroy(gameObject);
-        }
+
+        Singleton = this;
+        Debug.Log("VRRigReferenceCurrent Singleton inicialitzat");
     }
 }
