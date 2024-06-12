@@ -2070,12 +2070,12 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 64865fa8e9a7e3d47bbff341867de3cc, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  Adress: 127.0.0.1
+  Address: 127.0.0.1
   Port: 777
   Jugador: {fileID: 3091771616059379756, guid: d3d5550318e385d449f499efe89c936f, type: 3}
   playerNetworkContainerPrefab: {fileID: 2061780122611096116, guid: 7501027912014654398526556ae8f9bf, type: 3}
   PermetreConnexionsRemotes: 0
-  Protocol: 0
+  Protocol: 1
 --- !u!4 &1395371458
 Transform:
   m_ObjectHideFlags: 0

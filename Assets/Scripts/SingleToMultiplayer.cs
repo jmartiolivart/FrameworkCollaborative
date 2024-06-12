@@ -9,17 +9,18 @@ using Unity.Services.Lobbies.Models;
 using Unity.Services.Authentication;
 using System.Collections.Generic;
 using System;
+using System.Collections;
 using Unity.Netcode.Components;
 
 public class SingleToMultiplayer : NetworkBehaviour
 {
-    public string Adress = "127.0.0.1";
+    public string Address = "127.0.0.1";
     public ushort Port = 7777;
     [Header("Prefab")]
     public GameObject Jugador;
     public GameObject playerNetworkContainerPrefab;
 
-    [Header("Per proves locals, es millor deixar desactivada l'opció, per evitar exposar els ports del teu dispositu")]
+    [Header("Per proves locals, es millor deixar desactivada l'opció, per evitar exposar els ports del teu dispositiu")]
     public bool PermetreConnexionsRemotes = false;
     public ProtocolType Protocol;
 
@@ -29,22 +30,32 @@ public class SingleToMultiplayer : NetworkBehaviour
 
     async void Awake()
     {
+        Debug.Log("SingleToMultiplayer Awake called");
         await UnityServices.InitializeAsync();
+
         networkManager = new GameObject("NetworkManager");
         networkManagerComponent = networkManager.AddComponent<NetworkManager>();
         unityTransportComponent = networkManager.AddComponent<UnityTransport>();
-        Debug.Log("SingleToMultiplayer Awake called");
+
+        unityTransportComponent.ConnectionData.Address = Address;
+        unityTransportComponent.ConnectionData.Port = Port;
+
+        networkManagerComponent.NetworkConfig = new NetworkConfig();
+        networkManagerComponent.NetworkConfig.NetworkTransport = (NetworkTransport)unityTransportComponent;
+
+        networkManagerComponent.NetworkConfig.PlayerPrefab = Jugador;
+
+        if (Protocol == ProtocolType.RelayUnityTransport)
+        {
+            Debug.LogError(Protocol + " ITS RELAYYYY");
+            NetworkConnect networkConnect = networkManager.AddComponent<NetworkConnect>();
+            networkConnect.transport = unityTransportComponent; // Assigna el transport
+        }
     }
 
     private void Start()
     {
         Debug.Log("SingleToMultiplayer Start called");
-        unityTransportComponent = settingUpUnityTransport(unityTransportComponent);
-
-        networkManagerComponent.NetworkConfig = new NetworkConfig();
-        networkManagerComponent.NetworkConfig.NetworkTransport = (NetworkTransport)unityTransportComponent;
-
-        networkManagerComponent = settingUpNetworkManager(networkManagerComponent);
 
         if (Jugador != null)
         {
@@ -65,56 +76,18 @@ public class SingleToMultiplayer : NetworkBehaviour
             Debug.LogError("Jugador prefab no està assignat!");
         }
 
-        networkManagerComponent.NetworkConfig.PlayerPrefab = Jugador;
-
         if (Protocol == ProtocolType.UnityTransport)
         {
             NetworkManager.Singleton.StartHost();
         }
-        else if (Protocol == ProtocolType.RelayUnityTransport)
-        {
-            Debug.LogError(Protocol + " ITS RELAYYYY");
-            NetworkConnect networkConnect = GetComponent<NetworkConnect>();
-            if (networkConnect == null)
-            {
-                networkConnect = networkManager.AddComponent<NetworkConnect>();
-            }
-        }
-
-        NetworkManager.Singleton.OnServerStarted += OnServerStartedHandler;
-    }
-
-    private UnityTransport settingUpUnityTransport(UnityTransport unityTransportComponent)
-    {
-        unityTransportComponent.ConnectionData.Address = Adress;
-        unityTransportComponent.ConnectionData.Port = Port;
-        return unityTransportComponent;
-    }
-
-    private NetworkManager settingUpNetworkManager(NetworkManager networkManagerComponent)
-    {
-        if (Jugador == null)
-        {
-            Debug.LogError("Es necessari afegir un prefab de Jugador a la variable Jugador.");
-        }
-        else
-        {
-            networkManagerComponent.NetworkConfig.PlayerPrefab = Jugador;
-        }
-        return networkManagerComponent;
     }
 
     private void OnServerStartedHandler()
     {
         Debug.Log("OnServerStartedHandler called");
+
         if (NetworkManager.Singleton.IsServer)
         {
-            if (Jugador == null)
-            {
-                Debug.LogError("Jugador prefab no està assignat!");
-                return;
-            }
-
             GameObject playerNetworkContainer = GameObject.Find("PlayerNetworkContainer");
             if (playerNetworkContainer == null)
             {
@@ -127,8 +100,12 @@ public class SingleToMultiplayer : NetworkBehaviour
                     if (containerNetworkObject != null)
                     {
                         containerNetworkObject.Spawn();
+                        Debug.Log("PlayerNetworkContainer instantiated and spawned manually");
                     }
-                    Debug.Log("PlayerNetworkContainer instantiated and spawned manually");
+                    else
+                    {
+                        Debug.LogError("NetworkObject no està assignat al prefab PlayerNetworkContainer!");
+                    }
                 }
                 else
                 {
@@ -147,11 +124,6 @@ public class SingleToMultiplayer : NetworkBehaviour
                     {
                         networkObject.SpawnAsPlayerObject(clientId);
                         Debug.Log("Instantiated Player");
-
-                        Debug.Log("NetworkObject del PlayerNetworkContainer:");
-                        Debug.Log("  IsSpawned: " + networkObject.IsSpawned);
-                        Debug.Log("  IsOwner: " + networkObject.IsOwner);
-                        Debug.Log("  OwnerClientId: " + networkObject.OwnerClientId);
                     }
                     else
                     {
@@ -181,6 +153,12 @@ public class SingleToMultiplayer : NetworkBehaviour
             Debug.Log("NetworkConnect Awake called");
             await UnityServices.InitializeAsync();
             await AuthenticationService.Instance.SignInAnonymouslyAsync();
+            StartCoroutine(DelayedJoinOrCreate());
+        }
+
+        private IEnumerator DelayedJoinOrCreate()
+        {
+            yield return null;
             JoinOrCreate();
         }
 
@@ -205,30 +183,51 @@ public class SingleToMultiplayer : NetworkBehaviour
         {
             try
             {
+                Debug.Log("Iniciant creació d'allocació de Relay...");
                 Allocation allocation = await RelayService.Instance.CreateAllocationAsync(maxConnection);
+                Debug.Log("Allocació de Relay creada correctament.");
+
                 string joinCode = await RelayService.Instance.GetJoinCodeAsync(allocation.AllocationId);
+                Debug.Log("Join code obtingut: " + joinCode);
 
-                Debug.LogError(joinCode);
+                Debug.Log("Verificant que transport no és null...");
+                if (transport == null)
+                {
+                    Debug.LogError("transport és null!");
+                    return;
+                }
 
+                Debug.Log("Configurant dades de Relay...");
                 transport.SetHostRelayData(allocation.RelayServer.IpV4, (ushort)allocation.RelayServer.Port,
                     allocation.AllocationIdBytes, allocation.Key, allocation.ConnectionData);
 
+                Debug.Log("Creant lobby...");
                 CreateLobbyOptions lobbyOptions = new CreateLobbyOptions
                 {
                     IsPrivate = false,
                     Data = new Dictionary<string, DataObject>
-            {
-                { "JOIN_KEY", new DataObject(DataObject.VisibilityOptions.Public, joinCode) }
-            }
+                    {
+                        { "JOIN_KEY", new DataObject(DataObject.VisibilityOptions.Public, joinCode) }
+                    }
                 };
 
                 currentLobby = await Lobbies.Instance.CreateLobbyAsync("Lobby Name", maxConnection, lobbyOptions);
+                Debug.Log("Lobby creat correctament: " + currentLobby.Id);
 
+                Debug.Log("Iniciant Host...");
                 NetworkManager.Singleton.StartHost();
             }
-            catch (Exception ex)
+            catch (LobbyServiceException e)
             {
-                Debug.LogError("Error creating Relay allocation: " + ex.Message);
+                Debug.LogError("Error creant lobby: " + e.Message);
+            }
+            catch (RelayServiceException e)
+            {
+                Debug.LogError("Error creant allocació de Relay: " + e.Message);
+            }
+            catch (Exception e)
+            {
+                Debug.LogError("Error inesperat: " + e.Message);
             }
         }
 
